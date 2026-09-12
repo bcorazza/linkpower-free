@@ -1,5 +1,9 @@
 # LinkPower Free
 
+> **Also in this repo:** [Starlink Test](starlink/) — a WiFi connection reliability
+> monitor for the Starlink Mini (dish telemetry, latency/jitter/loss, real ICMP ping).
+> Live: <https://bcorazza.github.io/linkpower-free/starlink/>
+
 A free, open, web-based replacement for the subscription companion app for
 **PeakDo Link-Power** batteries (LinkPower 1 / 2 / 3 / Pod 1 / Power Dock) used on
 **Starlink Mini** setups.
@@ -64,6 +68,8 @@ other client) first.
 | `manifest.webmanifest` | PWA manifest for Add to Home Screen |
 | `PROTOCOL.md` | The reverse-engineered BLE protocol, written up |
 | `tests/protocol.test.mjs` | Codec round-trip + frame decode tests (`node tests/protocol.test.mjs`) |
+| `starlink/` | Separate app: Starlink connection reliability monitor |
+| `tools/starlink-agent.py` | Local agent for the Starlink Test app (dish telemetry + ICMP ping) |
 
 ## Development
 

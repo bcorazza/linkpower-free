@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Starlink Test — connection reliability monitor</title>
+<meta name="theme-color" content="#0b0f14" />
+<link rel="icon" href="../icons/favicon-32.png" sizes="32x32" />
+<link rel="apple-touch-icon" href="../icons/apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Starlink Test" />
+<style>
+  :root{--bg:#0b0f14;--panel:#141b24;--panel2:#1b242f;--line:#26313d;--text:#e8eef5;
+        --muted:#8fa0b3;--green:#34d399;--orange:#fb923c;--red:#f87171;--blue:#38bdf8;--violet:#a78bfa}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+       padding:16px 16px 64px;-webkit-text-size-adjust:100%;overflow-wrap:break-word}
+  h1{font-size:19px;margin:0 0 2px;display:flex;align-items:center;gap:8px}
+  h1 .dot{color:var(--blue)}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:14px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  button{font:inherit;font-weight:600;color:#04121c;background:var(--blue);border:0;border-radius:10px;padding:11px 16px;cursor:pointer}
+  button.ghost{background:var(--panel2);color:var(--text);border:1px solid var(--line)}
+  button.sm{padding:8px 12px;font-size:13px;border-radius:8px}
+  button:disabled{opacity:.35;cursor:not-allowed}
+  .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));margin-top:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+  .card h2{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0 0 10px;
+           display:flex;justify-content:space-between;gap:8px;align-items:center}
+  .big{font-size:42px;font-weight:700;line-height:1;letter-spacing:-.02em}
+  .big small{font-size:16px;font-weight:600;color:var(--muted);margin-left:4px}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;margin-top:12px}
+  .stats.three{grid-template-columns:1fr 1fr 1fr}
+  .stat .k{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+  .stat .v{font-size:17px;font-weight:600;font-variant-numeric:tabular-nums}
+  .pill{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+        padding:3px 9px;border-radius:999px;background:var(--panel2);color:var(--muted);border:1px solid var(--line);white-space:nowrap}
+  .pill.on{color:var(--green);border-color:#1c4d3c;background:#10291f}
+  .pill.warn{color:var(--orange);border-color:#552e12;background:#2a180a}
+  .pill.bad{color:var(--red);border-color:#552020;background:#2a1010}
+  .pill.info{color:var(--blue);border-color:#16405a;background:#0d2233}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:13px}
+  .kv .k{color:var(--muted)}
+  .kv .v{font-family:ui-monospace,Menlo,monospace}
+  .muted{color:var(--muted);font-size:12.5px}
+  .hidden{display:none !important}
+  canvas{width:100%;height:150px;display:block}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+  th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+  td.fail{color:var(--red);font-weight:600}
+  input[type=text],input[type=number]{font:inherit;background:#070a0e;color:var(--text);border:1px solid var(--line);
+        border-radius:8px;padding:9px 10px}
+  label.chk{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--muted);cursor:pointer}
+  code{font:12px/1.5 ui-monospace,Menlo,monospace;color:#b9cde0;background:#070a0e;padding:1px 5px;border-radius:5px}
+  #banner{border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:13.5px}
+  #banner.warn{background:#2a1f0a;border:1px solid #5a4415;color:#f4d99a}
+  #banner.info{background:#0d2233;border:1px solid #16405a;color:#bae6fd}
+  #banner.bad{background:#2a1010;border:1px solid #552020;color:#ffb4b4}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
+  .legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:middle}
+  .foot{margin-top:20px;color:var(--muted);font-size:11.5px;line-height:1.7}
+  .mono{font-family:ui-monospace,Menlo,monospace}
+</style>
+</head>
+<body>
+
+<h1><span class="dot">◈</span> Starlink Test</h1>
+<div class="sub">Connection reliability monitor for your Starlink Mini over WiFi.</div>
+
+<div id="banner" class="hidden"></div>
+
+<div class="row">
+  <button id="btnToggle">Start monitoring</button>
+  <span id="modePill" class="pill">checking…</span>
+  <span id="runPill" class="pill">idle</span>
+  <span id="dishPill" class="pill hidden">dish —</span>
+</div>
+
+<div class="grid">
+
+  <div class="card" id="cardDish">
+    <h2>Starlink dish <span id="dishAge" class="muted"></span></h2>
+    <div class="big"><span id="dishLatency">--</span><small>ms</small></div>
+    <div class="stats">
+      <div class="stat"><div class="k">Drop rate</div><div class="v" id="dishDrop">--</div></div>
+      <div class="stat"><div class="k">Obstructed</div><div class="v" id="dishObstr">--</div></div>
+      <div class="stat"><div class="k">Downlink</div><div class="v" id="dishDown">--</div></div>
+      <div class="stat"><div class="k">Uplink</div><div class="v" id="dishUp">--</div></div>
+      <div class="stat"><div class="k">Uptime</div><div class="v" id="dishUptime">--</div></div>
+      <div class="stat"><div class="k">Signal</div><div class="v" id="dishSignal">--</div></div>
+    </div>
+    <div class="muted mono" id="dishDev" style="margin-top:12px">—</div>
+    <div class="muted" id="dishNote" style="margin-top:8px"></div>
+  </div>
+
+  <div class="card">
+    <h2>Internet probes <span class="muted" id="probeAge"></span></h2>
+    <div class="big"><span id="probeLatency">--</span><small>ms</small></div>
+    <div class="stats three">
+      <div class="stat"><div class="k">Loss</div><div class="v" id="probeLoss">--</div></div>
+      <div class="stat"><div class="k">Jitter</div><div class="v" id="probeJitter">--</div></div>
+      <div class="stat"><div class="k">p95</div><div class="v" id="probeP95">--</div></div>
+      <div class="stat"><div class="k">Min</div><div class="v" id="probeMin">--</div></div>
+      <div class="stat"><div class="k">Max</div><div class="v" id="probeMax">--</div></div>
+      <div class="stat"><div class="k">Probes</div><div class="v" id="probeCount">0</div></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="card" style="margin-top:12px">
+  <h2>Latency over time <span class="muted" id="scaleNote"></span></h2>
+  <canvas id="chart" height="150"></canvas>
+  <div class="legend" id="legend"></div>
+</div>
+
+<div class="grid">
+
+  <div class="card">
+    <h2>Real ICMP ping <span id="pingPill" class="pill hidden">agent only</span></h2>
+    <div class="row">
+      <input type="text" id="pingHost" value="1.1.1.1" style="width:150px" />
+      <input type="number" id="pingCount" value="10" min="1" max="20" style="width:74px" />
+      <button id="btnPing" class="ghost sm">Run ping</button>
+      <button id="btnPingDish" class="ghost sm">Ping dish</button>
+    </div>
+    <div class="stats three" style="margin-top:12px">
+      <div class="stat"><div class="k">Avg</div><div class="v" id="pingAvg">--</div></div>
+      <div class="stat"><div class="k">Min / Max</div><div class="v" id="pingMinMax">--</div></div>
+      <div class="stat"><div class="k">Jitter</div><div class="v" id="pingJitter">--</div></div>
+      <div class="stat"><div class="k">Loss</div><div class="v" id="pingLoss">--</div></div>
+      <div class="stat"><div class="k">Received</div><div class="v" id="pingRecv">--</div></div>
+      <div class="stat"><div class="k">Elapsed</div><div class="v" id="pingTime">--</div></div>
+    </div>
+    <div class="muted" id="pingNote" style="margin-top:8px"></div>
+  </div>
+
+  <div class="card">
+    <h2>Session</h2>
+    <div class="row">
+      <button id="btnThroughput" class="ghost sm">Download test</button>
+      <button id="btnCsv" class="ghost sm">Export CSV</button>
+      <button id="btnClear" class="ghost sm">Clear</button>
+    </div>
+    <div class="stats" style="margin-top:12px">
+      <div class="stat"><div class="k">Download</div><div class="v" id="tput">--</div></div>
+      <div class="stat"><div class="k">Outages</div><div class="v" id="outageCount">0</div></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <span class="muted">Probe every</span>
+      <input type="number" id="interval" value="3" min="1" max="60" style="width:74px" />
+      <span class="muted">seconds</span>
+    </div>
+    <div class="muted" style="margin-top:10px">
+      Probes are HTTPS round trips (DNS + TCP + TLS + response). The first probe to each
+      host includes connection setup; after that it reflects network latency. A failed
+      request counts as loss and is logged below.
+    </div>
+  </div>
+
+</div>
+
+<div class="card" style="margin-top:12px">
+  <h2>Outage &amp; anomaly log <span class="muted" id="logCount"></span></h2>
+  <table>
+    <thead><tr><th style="width:90px">Time</th><th style="width:80px">Type</th><th>Detail</th></tr></thead>
+    <tbody id="logBody"><tr><td colspan="3" class="muted">nothing yet</td></tr></tbody>
+  </table>
+</div>
+
+<div class="card foot">
+  <div id="howto"></div>
+  <div style="margin-top:8px">
+    Unofficial diagnostics tool. Not affiliated with or endorsed by SpaceX/Starlink.
+  </div>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
