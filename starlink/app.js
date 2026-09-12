@@ -235,19 +235,22 @@ function render() {
   const sent = S.samples.length * PROBE_TARGETS.length;
   const loss = sent ? ((sent - all.length) / sent) * 100 : 0;
 
-  // Jitter must come from the time-ordered series, not the sorted one:
-  // the mean gap between neighbouring *sorted* values is just spacing, not jitter.
-  let jitSum = 0, jitN = 0;
+  // Jitter = median of successive differences on the time-ordered series.
+  // Two reasons: the mean gap between *sorted* values is just spacing, and a
+  // single stall (a multi-second probe) would otherwise swamp the mean and
+  // make every reading look useless. Median absorbs that; max/p95 still show it.
+  const diffs = [];
   PROBE_TARGETS.forEach((tg) => {
     let prev = null;
     S.samples.forEach((s) => {
       const v = s.per[tg.name];
       if (v === null || v === undefined) { prev = null; return; }
-      if (prev !== null) { jitSum += Math.abs(v - prev); jitN++; }
+      if (prev !== null) diffs.push(Math.abs(v - prev));
       prev = v;
     });
   });
-  const jitter = jitN ? jitSum / jitN : null;
+  diffs.sort((a, b) => a - b);
+  const jitter = diffs.length ? percentile(diffs, 50) : null;
 
   const cur = S.samples.length
     ? PROBE_TARGETS.map((tg) => S.samples[S.samples.length - 1].per[tg.name]).filter((v) => v !== null)
