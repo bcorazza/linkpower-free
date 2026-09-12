@@ -27,6 +27,13 @@ async def run(seconds, out):
     def cb(device, adv):
         if device.address in seen:
             seen[device.address][1] = adv.rssi
+            # The pack often advertises with no local name and supplies it only
+            # in the scan response. Record the name when it finally shows up.
+            if device.name and not seen[device.address][0]:
+                seen[device.address][0] = device.name
+                uuids = [str(u).lower() for u in (adv.service_uuids or [])]
+                emit(f'[{stamp()}] name resolved        {adv.rssi:>5} dBm  {device.name}'
+                     f'{"  svc=" + ",".join(uuids) if uuids else ""}')
             return
         name = device.name or ''
         uuids = [str(u).lower() for u in (adv.service_uuids or [])]
@@ -37,8 +44,11 @@ async def run(seconds, out):
         emit(f'[{stamp()}] {tag:<22} {adv.rssi:>5} dBm  {name or "(no name)"}'
              f'{"  svc=" + ",".join(uuids) if uuids else ""}'
              f'{"  mfr=" + str(mfr) if mfr else ""}')
-        if hit and out:
-            emit(f'[{stamp()}] *** MATCH FOUND — reload the web app and hit Connect')
+        if hit:
+            emit(f'[{stamp()}]     full adv: local_name={adv.local_name!r} tx_power={adv.tx_power}'
+                 f' uuids={uuids} mfr={adv.manufacturer_data}')
+            emit(f'[{stamp()}] *** MATCH FOUND — connect from the web app now; it advertises'
+                 f' {"WITH a name" if name else "with NO name (use the service filter, not the name)"}')
 
     emit(f'[{stamp()}] watching for BLE devices… press the power button 3x on the LinkPower Pack NOW')
     scanner = BleakScanner(detection_callback=cb)
