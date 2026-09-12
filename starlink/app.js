@@ -308,15 +308,13 @@ function drawChart() {
   for (let i = 0; i <= 3; i++) {
     const y = Math.round(pad + ((h - pad * 2) * i) / 3) + 0.5;
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
-    if (i < 3) {
-      const v = maxV * (1 - i / 3);
-      ctx.fillStyle = '#6b7d90'; ctx.font = '10px ui-monospace, Menlo, monospace';
-      ctx.fillText(v.toFixed(0) + ' ms', 4, y - 3);
-    }
   }
   if (data.length < 2) return;
 
-  const xFor = (i) => (i / (MAX_POINTS - 1)) * w;
+  // Stretch the trace to fill the width until the window is full, otherwise an
+  // early session is a sliver crammed against the left edge.
+  const span = data.length < MAX_POINTS ? data.length - 1 : MAX_POINTS - 1;
+  const xFor = (i) => (i / Math.max(1, span)) * w;
   const yFor = (v) => h - pad - (v / maxV) * (h - pad * 2);
 
   PROBE_TARGETS.forEach((tg) => {
@@ -338,6 +336,19 @@ function drawChart() {
       ctx.fillRect(xFor(i) - 1.5, h - 12, 3, 12);
     }
   });
+
+  // Axis labels last, with a backdrop, so the trace can't sit on top of them.
+  ctx.font = '10px ui-monospace, Menlo, monospace';
+  for (let i = 0; i < 3; i++) {
+    const v = maxV * (1 - i / 3);
+    const y = Math.round(pad + ((h - pad * 2) * i) / 3);
+    const txt = v.toFixed(0) + ' ms';
+    const tw = ctx.measureText(txt).width;
+    ctx.fillStyle = 'rgba(11,15,20,.88)';
+    ctx.fillRect(2, y + 1, tw + 6, 12);
+    ctx.fillStyle = '#6b7d90';
+    ctx.fillText(txt, 5, y + 11);
+  }
   $('scaleNote').textContent = `0–${maxV.toFixed(0)} ms`;
 }
 
