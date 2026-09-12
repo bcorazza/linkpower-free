@@ -328,8 +328,10 @@ function drawChart() {
 const RT = {
   anchorSoc: null,        // % at the moment of anchoring
   anchorEnergyWh: null,   // session energy counter when anchored
-  anchorSource: null,     // 'open-circuit' | 'loaded'
-  openCircuitV: null,     // best resting voltage seen
+  anchorSource: null,     // 'unloaded' | 'loaded'
+  anchorVolts: null,      // raw port voltage at the anchor
+  anchorAmps: null,       // load at the anchor
+  bestAnchorAmps: Infinity,
   last: null,
 };
 
@@ -342,9 +344,10 @@ function rtAnchor(volts, amps, enabled) {
   const ocv = openCircuitVoltage(volts, amps, enabled, rtPacks());
   RT.anchorSoc = soc;
   RT.anchorEnergyWh = S.energyWh;
-  RT.anchorSource = (enabled && amps > 0.05) ? 'loaded' : 'open-circuit';
-  if (!enabled) RT.openCircuitV = volts;          // a genuine resting sample
-  log(`runtime re-anchored: ${soc.toFixed(0)}% (${RT.anchorSource}, ocv ${ocv.toFixed(2)} V)`);
+  RT.anchorVolts = volts;
+  RT.anchorAmps = amps;
+  RT.anchorSource = (enabled && amps > 0.05) ? 'loaded' : 'unloaded';
+  log(`runtime re-anchored: ${soc.toFixed(0)}% (${RT.anchorSource}, ${amps.toFixed(2)} A, ocv ${ocv.toFixed(2)} V)`);
 }
 
 function renderRuntime() {
@@ -362,11 +365,21 @@ function renderRuntime() {
   }
 
   // Anchor on the first reading, and re-anchor whenever we get a true resting voltage.
-  if (RT.anchorSoc === null) rtAnchor(v, a || 0, enabled);
-  // Only a confirmed OFF output gives a true resting voltage. An unknown state
-  // would otherwise make us treat a loaded reading as open-circuit and report 0%.
-  if (confirmedOff && v > 10 && (RT.openCircuitV === null || Math.abs(v - RT.openCircuitV) > 0.05)) {
-    rtAnchor(v, 0, false);
+  // Anchor on the first reading, then re-anchor whenever a *lower* current is
+  // seen, because a smaller load means a smaller sag correction and therefore a
+  // more trustworthy reading.
+  //
+  // Deliberately NOT anchoring on the output-off reading any more. Measured on
+  // hardware: with the output off the port reports ~18.82 V while the same pack
+  // under a 1.6 A load reports 19.10 V. Unloading a battery cannot lower its
+  // voltage, so that off-state reading is not a true open-circuit voltage — it
+  // sits ~0.4 V low and anchoring on it biased the estimate low by ~8 points.
+  const amps = a || 0;
+  if (RT.anchorSoc === null) { rtAnchor(v, amps, enabled); RT.bestAnchorAmps = amps; }
+  else if (enabled && amps > 0.05 && amps < RT.bestAnchorAmps - 0.1
+           && Math.abs(v - (RT.anchorVolts ?? v)) > 0.05) {
+    rtAnchor(v, amps, enabled);
+    RT.bestAnchorAmps = amps;
   }
 
   // Coulomb counting from the anchor: clamp so a bad reading cannot go negative.
@@ -396,9 +409,9 @@ function renderRuntime() {
   }
 
   const notes = [];
-  notes.push(RT.anchorSource === 'open-circuit'
-    ? 'Anchored on a true resting voltage' + (RT.openCircuitV ? ` (${RT.openCircuitV.toFixed(2)} V)` : '')
-    : 'Anchored under load — sag-corrected using the measured 181 mOhm');
+  notes.push(RT.anchorAmps !== null && RT.anchorAmps > 0.05
+    ? `Anchored at ${RT.anchorAmps.toFixed(2)} A, sag-corrected with the measured 87 mOhm`
+    : 'Anchored on an unloaded reading');
   if (confirmedOff) notes.push('output is off; no runtime to report');
   notes.push(`assumes ${$('rtAh').value} Ah x ${$('rtCount').value} packs at 20 V`);
   notes.push('the pack has no fuel gauge, so treat this as ±10%');

@@ -3,13 +3,17 @@
 // Kept dependency-free and DOM-free so it can be unit tested (tests/soc.test.mjs).
 
 export const CELLS = 5;               // DeWalt 20V MAX packs are 5S Li-ion
-// Measured on real hardware (2026-09-12, 2 packs installed) by fitting
-// V = a - R*I across a 0.55-1.67 A load swing: R = 0.181 ohm, R^2 = 0.70.
-// Far higher than a fresh 5 Ah pack implies (~0.1 ohm each, halved in
-// parallel), so the packs are aged and/or the dock adds series resistance.
-// This directly shifts the state-of-charge estimate by ~10 points, which is
-// why it is measured rather than assumed.
-export const R_OHM_AT_2_PACKS = 0.181;
+// Measured on real hardware (2026-09-12, 2 packs installed), two ways:
+//   least-squares fit of V = a - R*I over a 0.58-1.65 A swing: R = 86 mOhm (R^2 0.73)
+//   robust quartile two-point over the same data:                R = 89 mOhm
+// They agree, so 87 mOhm is used. That is about what two healthy ~0.17 ohm
+// packs in parallel should give, so the packs are in good shape.
+//
+// An earlier 40 s fit reported 181 mOhm; it was wrong because the pack voltage
+// drifted downward over the window and the drift was misattributed to current.
+// Separating the load bursts from the drift brought it down to the value above.
+//
+export const R_OHM_AT_2_PACKS = 0.087;
 export const WH_PER_PACK_VOLTS = 20;  // DeWalt label 20V MAX capacity at 20 V
 
 // Open-circuit voltage per cell -> state of charge for Li-ion.

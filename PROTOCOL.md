@@ -272,10 +272,34 @@ BLE address `C8:17:F5:E0:BE:52` byte-reversed — confirming the note in PeakDo'
 own source that the "device ID" is the MAC address.
 
 The one indirect signal is **internal resistance**, which packs in parallel
-divide. Measured on a 2-pack setup by fitting `V = a - R*I` over a 0.55-1.67 A
-load swing: **R = 0.181 ohm** (R^2 = 0.70). That is well above what fresh packs
-imply, so pack age and dock/wiring resistance dominate — too confounded to count
-packs with, but good enough to calibrate the sag correction.
+divide. Measured on a 2-pack setup two ways over a 0.58-1.65 A load swing:
+
+```
+least-squares fit  V = a - R*I   ->  R = 86 mOhm  (R^2 = 0.73)
+robust quartile two-point        ->  R = 89 mOhm
+```
+
+They agree, so **87 mOhm** is used. That is about what two healthy ~0.17 ohm
+packs in parallel should give. (An earlier 40 s run reported 181 mOhm; it was
+wrong because the pack voltage drifted downward across the window and that drift
+was misattributed to current. Separating the load bursts from the drift fixed it.)
+Too confounded to count packs with, but solid for the sag correction.
+
+### The output-off voltage is NOT a valid open-circuit voltage
+
+Worth knowing, because it looks like one:
+
+```
+loaded,  1.602 A   V = 19.102
+output OFF, 0.000 A V = 18.820     <- 0.28 V LOWER with no load
+loaded,  0.566 A   V = 19.249
+```
+
+Removing the load cannot *lower* a battery's terminal voltage, so the off-state
+reading is an artefact of the disabled output path (~0.4 V below the real
+open-circuit value given R = 87 mOhm). Anchoring state of charge on it biased the
+estimate low by ~8 points. The app therefore anchors on **loaded** readings with
+sag correction, and re-anchors whenever a lower-current reading appears.
 
 ### Method used by the app (`soc.js`)
 

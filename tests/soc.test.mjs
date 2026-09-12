@@ -23,10 +23,10 @@ eq('3.70 V/cell interpolates to 38.33%', socFromCellVolts(3.70), 38.333333, 1e-3
 
 console.log('\n--- sag correction ---');
 eq('resting voltage is unchanged', openCircuitVoltage(19.89, 0, false, 2), 19.89);
-eq('loaded voltage adds I*R (2 packs, measured R=0.181)', openCircuitVoltage(20.00, 1.60, true, 2), 20.2896, 1e-6);
-eq('4 packs halves the sag', openCircuitVoltage(20.00, 1.60, true, 4), 20.1448, 1e-6);
+eq('loaded voltage adds I*R (2 packs, measured R=0.087)', openCircuitVoltage(20.00, 1.60, true, 2), 20.1392, 1e-6);
+eq('4 packs halves the sag', openCircuitVoltage(20.00, 1.60, true, 4), 20.0696, 1e-6);
 eq('SoC from 19.89 V resting', socFromVoltage(19.89, 0, false, 2), 82.25, 0.05);
-eq('SoC from 20.09 V @1.62 A loaded', socFromVoltage(20.09, 1.62, true, 2), 92.664, 0.01);
+eq('SoC from 20.09 V @1.62 A loaded', socFromVoltage(20.09, 1.62, true, 2), 89.619, 0.01);
 
 console.log('\n--- energy and runtime ---');
 eq('1 x 5 Ah pack = 100 Wh', packEnergyWh(5, 1), 100);
