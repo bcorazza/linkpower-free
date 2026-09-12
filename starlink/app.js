@@ -63,7 +63,19 @@ function percentile(sorted, p) {
 }
 
 // ---------------------------------------------------------------- agent
+/** The agent only ever runs on plain http on a loopback or private address.
+ *  Checking first avoids a pointless 404 (and a console error) when the app is
+ *  hosted on HTTPS. */
+function looksLocal() {
+  const h = location.hostname;
+  if (location.protocol !== 'http:') return false;
+  return h === 'localhost' || h === '127.0.0.1' || h === '::1' || h === '[::1]' ||
+         h.endsWith('.local') ||
+         /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h);
+}
+
 async function detectAgent() {
+  if (!looksLocal()) { showBrowserOnly('no local agent on this origin'); return null; }
   try {
     const r = await fetch('api/health', { cache: 'no-store' });
     if (!r.ok) throw new Error('no agent');
@@ -82,18 +94,23 @@ async function detectAgent() {
     }
     return j;
   } catch (e) {
-    S.mode = 'web';
-    $('modePill').className = 'pill info';
-    $('modePill').textContent = 'browser-only mode';
-    $('pingPill').classList.remove('hidden');
-    $('cardDish').classList.add('hidden');
-    $('dishPill').classList.add('hidden');
-    $('btnPing').disabled = true;
-    $('btnPingDish').disabled = true;
-    banner('info', 'Browser-only mode: internet probes work here, but dish telemetry and real ICMP ping ' +
-      'need the local agent. On your Mac run: python3 tools/starlink-agent.py — or open the app from that agent.');
+    showBrowserOnly(e.message);
     return null;
   }
+}
+
+function showBrowserOnly(why) {
+  S.mode = 'web';
+  $('modePill').className = 'pill info';
+  $('modePill').textContent = 'browser-only mode';
+  $('pingPill').classList.remove('hidden');
+  $('cardDish').classList.add('hidden');
+  $('dishPill').classList.add('hidden');
+  $('btnPing').disabled = true;
+  $('btnPingDish').disabled = true;
+  banner('info', 'Browser-only mode (' + why + '): internet probes work here, but dish telemetry and ' +
+    'real ICMP ping need the local agent. On your Mac run: python3 tools/starlink-agent.py — ' +
+    'then open http://localhost:8790/');
 }
 
 // ---------------------------------------------------------------- probing
