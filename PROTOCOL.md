@@ -137,6 +137,59 @@ firmware doesn't expose that feature. Handle both.
 | `BP4SL3-D2` | Power Dock with Adapter (DeWalt/Makita/Milwaukee, 2-battery) |
 | `BP4SL3-D4` | Power Dock (4-battery) |
 
+## Verified against real hardware
+
+Confirmed by direct connection on 2026-09-12 to a **LinkPower Pack** (`BP4SL3`),
+advertised as `Link-Power-Pack`, firmware 2.0.1 / hardware V1#0201 / software 1.2.1.
+
+Actual GATT tree of that unit — note how little of the full protocol it implements:
+
+```
+00005301-...  LinkPower service
+   00004301  OTA                 write, read
+   00004302  LinkPower command   write, read
+   00004304  DC port status      notify, read
+0000180a-...  device_information  read  (model/fw/hw/sw/manufacturer)
+00001805-...  current_time        read, write, notify
+```
+
+Absent on this model: `0x4303` (pack gauge), `0x4305` (USB-C), `0x4310` (factory).
+The Pack has no battery gauge or USB-C port of its own, so this is correct rather
+than broken — treat a failed read as "not on this model".
+
+### Command responses are acknowledged
+
+Writing `01 01 01` (DC_CONTROL SET ON) to `0x4302` returns:
+
+```
+01 81 00      [opcode, 0x80 | action, status]      status 0x00 = OK
+```
+
+So `0x80` marks a response, the low bit mirrors the action (`0x00` GET / `0x01` SET),
+and byte 2 is a status/error code. The capability query (`FE 00`) returned `fe 80 9c`
+— 3 bytes, below the 7 the official PWA requires, so it takes the "features unknown"
+path and falls back to inferring capability from frame lengths. Do the same.
+
+### Notifications are change-driven, not periodic
+
+`start_notify` on `0x4304` is accepted but produced **zero frames in 3 seconds**
+while the load sat steady at 20.09 V / 1.62 A. A notification-only UI shows stale
+data on this firmware. **Poll the characteristics** (~2 s) and use notifications
+only as an extra trigger.
+
+### Observed sample
+
+```
+DC 0x4304 raw = 01 ff d9 e7 54 d6 46 f1
+  enabled=1  status=0xff -> -1 -> 2 (discharging)
+  d9 e7 -> 0xE7D9 -> mantissa 2009, exp -2 -> 20.09 V
+  54 d6 -> 0xD654 -> mantissa 1620, exp -3 ->  1.62 A
+  46 f1 -> 0xF146 -> mantissa  326, exp -1 -> 32.60 W
+```
+
+20.09 V x 1.62 A = 32.5 W, matching the reported 32.6 W — a Starlink Mini under
+normal load. Eight bytes, so no bypass byte: bypass is correctly reported as absent.
+
 ## Device-family differences
 
 The Pack / Power Dock (`BP4SL3-D4`, `BP4SL3-D2`) implements **only the DC port

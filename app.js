@@ -22,6 +22,7 @@ const CMD = Object.freeze({
 const ACT = Object.freeze({ GET:0x00, SET:0x01, DEL:0x02 });
 
 const SAMPLE_MS = 1000;
+const POLL_MS = 2000;          // this firmware notifies on change, not on a timer
 const CHART_POINTS = 120;
 
 // --------------------------------------------------------------------------
@@ -144,6 +145,7 @@ async function send(bytes, readBack = true) {
     }
   }
   if (!readBack) return null;
+  // Observed ACK: 01 81 00  ->  [opcode, 0x80|SET, status]   (status 0 = OK)
   // The firmware needs a beat between write and read; retry once.
   for (let attempt = 0; attempt < 2; attempt++) {
     await sleep(attempt === 0 ? 90 : 250);
@@ -498,6 +500,7 @@ async function attach(device) {
 
   await loadDeviceInfo();
   await startTelemetry();
+  startPolling();
   await requestWakeLock();
 }
 
@@ -522,6 +525,7 @@ function onDisconnected() {
   $('status').className = 'pill';
   $('status').textContent = 'disconnected';
   $('btnDisconnect').classList.add('hidden');
+  stopPolling();
   $('btnReconnect').classList.remove('hidden');
   releaseWakeLock();
   render();
@@ -623,14 +627,31 @@ async function sendRaw() {
   try { await send(bytes); } catch (e) { banner('warn', 'Write failed: ' + describeError(e)); }
 }
 
-async function readAllTelemetry() {
+async function readAllTelemetry(quiet = false) {
   if (S.demo) { render(); return; }
   for (const uuid of [CHR_EXT_BAT, CHR_DC_PORT, CHR_TYPEC]) {
-    try { await readChar(uuid); } catch (e) { log('read failed: ' + e.message); }
+    if (MISSING.has(uuid)) continue;
+    try { await readChar(uuid, quiet); }
+    catch (e) {
+      log('poll read 0x' + uuid.toString(16) + ' failed -> ' + describeError(e));
+      markMissing(uuid);
+    }
     await sleep(60);
   }
   render();
 }
+
+/** Evidence from real hardware: the DC-port characteristic carries no periodic
+ *  notification, so polling is required for a live readout. */
+let pollTimer = null;
+function startPolling() {
+  stopPolling();
+  pollTimer = setInterval(() => {
+    if (S.demo || !(S.device && S.server && S.server.connected) || busy) return;
+    readAllTelemetry(true).catch((e) => log('poll failed -> ' + describeError(e)));
+  }, POLL_MS);
+}
+function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
 
 // --------------------------------------------------------------------------
 // Screen wake lock
