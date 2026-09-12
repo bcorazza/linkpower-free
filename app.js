@@ -443,14 +443,39 @@ async function connect() {
 
 async function reconnect() {
   try {
-    if (!navigator.bluetooth.getDevices) { connect(); return; }
+    if (!navigator.bluetooth.getDevices) {
+      log('getDevices() unsupported here — falling back to a scan');
+      connect(); return;
+    }
     const devices = await navigator.bluetooth.getDevices();
-    if (!devices.length) { connect(); return; }
+    log('previously permitted devices: ' + devices.length);
+    if (!devices.length) {
+      banner('info', 'No previously-permitted device on this browser. Falling back to a scan — '
+                   + 'if the list is empty, the pack is still held by another client or its '
+                   + 'Bluetooth is off (triple-press the power button).');
+      connect(); return;
+    }
     await attach(devices[0]);
   } catch (e) {
     log('reconnect failed -> ' + describeError(e));
     connect();
   }
+}
+
+/** A BLE peripheral that is already connected to this Mac stops advertising, so
+ *  no scan can ever find it. getDevices() can still hand it back. */
+async function checkKnownDevices() {
+  if (!navigator.bluetooth || !navigator.bluetooth.getDevices) return;
+  try {
+    const devices = await navigator.bluetooth.getDevices();
+    if (devices.length) {
+      log('found previously-permitted device(s): ' + devices.map((d) => d.name || d.id).join(', '));
+      banner('info', 'This browser already has permission for '
+                   + (devices[0].name || 'a LinkPower device')
+                   + '. Click "Reconnect (no scan)" — a connected device never advertises, '
+                   + 'so scanning will not find it.');
+    }
+  } catch (e) { /* getDevices is best-effort */ }
 }
 
 async function attach(device) {
@@ -760,3 +785,4 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 }
 log('ready');
 render();
+checkKnownDevices();
