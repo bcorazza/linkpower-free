@@ -16,6 +16,14 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  const url = new URL(e.request.url);
+
+  // This worker's scope covers everything under the repo root, but /starlink/ is
+  // a DIFFERENT app. Leave it alone — otherwise the offline fallback below could
+  // serve the LinkPower page in place of the Starlink app.
+  if (url.origin !== self.location.origin) return;
+  if (url.pathname.includes('/starlink/')) return;
+
   e.respondWith(
     fetch(e.request).then((res) => {
       if (res && res.ok && res.type === 'basic') {
@@ -23,6 +31,12 @@ self.addEventListener('fetch', (e) => {
         caches.open(CACHE).then((c) => c.put(e.request, copy));
       }
       return res;
-    }).catch(() => caches.match(e.request).then((hit) => hit || caches.match('./index.html')))
+    }).catch(() => caches.match(e.request).then((hit) => {
+      // Only fall back to the app shell for an actual navigation, never for
+      // a sub-resource request (that would swap one app's HTML for another's).
+      if (hit) return hit;
+      if (e.request.mode === 'navigate') return caches.match('./index.html');
+      return Response.error();
+    }))
   );
 });

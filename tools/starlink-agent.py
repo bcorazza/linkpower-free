@@ -274,7 +274,13 @@ class Handler(SimpleHTTPRequestHandler):
         from urllib.parse import urlparse, parse_qs
         u = urlparse(self.path)
 
-        if u.path == "/api/health":
+        # Accept both http://host:8790/ and http://host:8790/starlink/ so the
+        # agent URL and the hosted-app URL can't be mixed up into a 404.
+        route = u.path
+        if route == "/starlink" or route.startswith("/starlink/"):
+            route = route[len("/starlink"):] or "/"
+
+        if route == "/api/health":
             dish_ok, detail = False, None
             try:
                 dish_status(self.server.dish_host, timeout=3.0)
@@ -288,7 +294,7 @@ class Handler(SimpleHTTPRequestHandler):
                 "time": time.time(),
             })
 
-        if u.path == "/api/status":
+        if route == "/api/status":
             try:
                 st = dish_status(self.server.dish_host)
                 st["ok"] = True
@@ -297,7 +303,7 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception as e:
                 return self._json({"ok": False, "error": f"{type(e).__name__}: {e}"}, 502)
 
-        if u.path == "/api/ping":
+        if route == "/api/ping":
             q = parse_qs(u.query)
             host = (q.get("host") or ["1.1.1.1"])[0]
             if not re.fullmatch(r"[A-Za-z0-9_.:\-]{1,80}", host):
@@ -305,9 +311,10 @@ class Handler(SimpleHTTPRequestHandler):
             count = int((q.get("count") or ["5"])[0])
             return self._json(ping(host, count))
 
-        if u.path == "/":
-            self.path = "/index.html"
-        if u.path.startswith("/icons/"):
+        if route == "/":
+            route = "/index.html"
+        self.path = route
+        if route.startswith("/icons/") or route.startswith("/icons?"):
             # shared icons live at the repo root, one level above the UI dir
             self.directory = str(ROOT)
         return super().do_GET()
