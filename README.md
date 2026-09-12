@@ -13,6 +13,27 @@ subscription.
 
 <https://bcorazza.github.io/linkpower-free/>
 
+## Status — verified on real hardware
+
+Verified 2026-09-12 against a **LinkPower Pack** (`BP4SL3`, firmware 2.0.1,
+hardware V1#0201) driving a Starlink Mini:
+
+| Item | Result |
+| --- | --- |
+| BLE connect | works — advertises as `Link-Power-Pack`, service `0x5301` |
+| Live telemetry | works — 20.09 V / 1.62 A / 32.60 W under normal dish load |
+| DC output **OFF** | works — `enabled=False`, 0.00 A, 0.00 W |
+| DC output **ON** | works — restored to ~32 W |
+| Pack gauge (0x4303) / USB-C (0x4305) | not implemented on this model — badged in the UI |
+
+Two hardware gotchas worth knowing, both handled:
+
+1. **`0x4302` supports `write` but not `write without response`.** Commands must be
+   *acknowledged* writes; a no-response write is accepted by the OS and ignored by
+   the device, which looks exactly like "the button did nothing".
+2. **`0x4304` notifies on change, not on a timer** — it produced zero frames over
+   3 s at steady load, so the app polls every 2 s for a live readout.
+
 ## Why this exists
 
 The hardware's control protocol is fully exposed by PeakDo's own **public** Web
