@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>LinkPower Free — Starlink Mini battery monitor</title>
+<meta name="description" content="Free, open, web-based Bluetooth monitor and DC power switch for PeakDo Link-Power batteries on Starlink Mini setups." />
+<meta name="theme-color" content="#0b0f14" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32" />
+<link rel="icon" href="icons/icon-192.png" sizes="192x192" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="LinkPower" />
+<style>
+  :root {
+    --bg:#0b0f14; --panel:#141b24; --panel2:#1b242f; --line:#26313d;
+    --text:#e8eef5; --muted:#8fa0b3; --green:#34d399; --orange:#fb923c;
+    --red:#f87171; --blue:#38bdf8; --violet:#a78bfa;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    padding:16px 16px 64px; -webkit-text-size-adjust:100%; overflow-wrap:break-word; }
+  h1 { font-size:19px; margin:0 0 2px; display:flex; align-items:center; gap:8px; }
+  h1 .bolt { color:var(--blue); }
+  .sub { color:var(--muted); font-size:13px; margin-bottom:14px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  button { font:inherit; font-weight:600; color:#04121c; background:var(--blue);
+    border:0; border-radius:10px; padding:11px 16px; cursor:pointer; }
+  button.ghost { background:var(--panel2); color:var(--text); border:1px solid var(--line); }
+  button.danger { background:var(--red); color:#2b0505; }
+  button.good { background:var(--green); color:#04231a; }
+  button:disabled { opacity:.35; cursor:not-allowed; }
+  button.sm { padding:8px 12px; font-size:13px; border-radius:8px; }
+  .grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); margin-top:14px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:14px; }
+  .card h2 { font-size:12px; letter-spacing:.09em; text-transform:uppercase; color:var(--muted);
+    margin:0 0 10px; display:flex; justify-content:space-between; gap:8px; align-items:center; }
+  .big { font-size:42px; font-weight:700; line-height:1; letter-spacing:-.02em; }
+  .big small { font-size:16px; font-weight:600; color:var(--muted); margin-left:4px; }
+  .stats { display:grid; grid-template-columns:1fr 1fr; gap:8px 14px; margin-top:12px; }
+  .stat .k { font-size:11px; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); }
+  .stat .v { font-size:17px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .pill { display:inline-block; font-size:11px; font-weight:700; letter-spacing:.06em;
+    text-transform:uppercase; padding:3px 9px; border-radius:999px;
+    background:var(--panel2); color:var(--muted); border:1px solid var(--line); white-space:nowrap; }
+  .pill.on { color:var(--green); border-color:#1c4d3c; background:#10291f; }
+  .pill.chg { color:var(--green); border-color:#1c4d3c; background:#10291f; }
+  .pill.dis { color:var(--orange); border-color:#552e12; background:#2a180a; }
+  .pill.err { color:var(--red); border-color:#552020; background:#2a1010; }
+  .pill.info { color:var(--blue); border-color:#16405a; background:#0d2233; }
+  pre { background:#070a0e; border:1px solid var(--line); border-radius:10px; padding:10px;
+    font:11.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; color:#9fb3c8;
+    max-height:280px; overflow:auto; white-space:pre-wrap; margin:0; }
+  code { font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; color:#b9cde0;
+    background:#070a0e; padding:1px 5px; border-radius:5px; }
+  .kv { display:grid; grid-template-columns:auto 1fr; gap:3px 12px; font-size:13px; }
+  .kv .k { color:var(--muted); }
+  .kv .v { font-family:ui-monospace,Menlo,monospace; }
+  .muted { color:var(--muted); font-size:12.5px; }
+  .hidden { display:none !important; }
+  #banner { border-radius:10px; padding:10px 12px; margin-bottom:12px; font-size:13.5px; }
+  #banner.warn { background:#2a1f0a; border:1px solid #5a4415; color:#f4d99a; }
+  #banner.bad { background:#2a1010; border:1px solid #552020; color:#ffb4b4; }
+  #banner.ok { background:#0f2a20; border:1px solid #1c4d3c; color:#a7f3d0; }
+  .dcbtn { min-width:132px; }
+  details summary { cursor:pointer; color:var(--muted); font-size:13px; }
+  details[open] summary { margin-bottom:10px; }
+  input[type=text], input[type=number], select { font:inherit; background:#070a0e; color:var(--text);
+    border:1px solid var(--line); border-radius:8px; padding:9px 10px; width:100%; }
+  label.chk { display:flex; gap:8px; align-items:center; font-size:13px; color:var(--muted); cursor:pointer; }
+  canvas { width:100%; height:120px; display:block; }
+  .sep { height:1px; background:var(--line); margin:12px 0; }
+  .foot { margin-top:20px; color:var(--muted); font-size:11.5px; line-height:1.7; }
+  .foot a { color:var(--blue); }
+</style>
+</head>
+<body>
+
+<h1><span class="bolt">⚡</span> LinkPower Free</h1>
+<div class="sub">Direct Bluetooth monitor &amp; DC power switch for PeakDo Link-Power hardware. Free, offline, no account.</div>
+
+<div id="banner" class="hidden"></div>
+
+<div class="row">
+  <button id="btnConnect">Connect to battery</button>
+  <button id="btnReconnect" class="ghost hidden">Reconnect</button>
+  <button id="btnDisconnect" class="ghost hidden">Disconnect</button>
+  <button id="btnDemo" class="ghost sm">Demo mode</button>
+  <span id="status" class="pill">idle</span>
+  <span id="wakePill" class="pill hidden">screen held awake</span>
+</div>
+
+<div class="row" style="margin-top:10px">
+  <label class="chk"><input type="checkbox" id="chkAll" /> Show all nearby Bluetooth devices (use if your device isn't listed)</label>
+</div>
+
+<div id="deviceCard" class="card hidden" style="margin-top:14px">
+  <h2>Device <button id="btnDump" class="ghost sm">Dump GATT tree</button></h2>
+  <div class="kv" id="devInfo"></div>
+</div>
+
+<div class="grid">
+
+  <div class="card">
+    <h2>DC output · Starlink Mini</h2>
+    <div class="big"><span id="dcPower">--</span><small>W</small></div>
+    <div class="stats">
+      <div class="stat"><div class="k">Voltage</div><div class="v" id="dcVolt">-- V</div></div>
+      <div class="stat"><div class="k">Current</div><div class="v" id="dcAmp">-- A</div></div>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <span id="dcState" class="pill">unknown</span>
+      <span id="dcFlow" class="pill">--</span>
+      <span id="dcBypass" class="pill hidden">bypass</span>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button id="btnDcOn" class="good dcbtn" disabled>Power ON</button>
+      <button id="btnDcOff" class="danger dcbtn" disabled>Power OFF</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Battery pack</h2>
+    <div class="big"><span id="batPower">--</span><small>W</small></div>
+    <div class="stats">
+      <div class="stat"><div class="k">Level</div><div class="v" id="batLevel">-- %</div></div>
+      <div class="stat"><div class="k">Voltage</div><div class="v" id="batVolt">-- V</div></div>
+      <div class="stat"><div class="k">Current</div><div class="v" id="batAmp">-- A</div></div>
+      <div class="stat"><div class="k">Runtime left</div><div class="v" id="batRemain">--</div></div>
+      <div class="stat"><div class="k">Capacity</div><div class="v" id="batCap">--</div></div>
+      <div class="stat"><div class="k">State</div><div class="v" id="batFlow" style="font-size:14px">--</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>USB-C port</h2>
+    <div class="big"><span id="tcPower">--</span><small>W</small></div>
+    <div class="stats">
+      <div class="stat"><div class="k">Voltage</div><div class="v" id="tcVolt">-- V</div></div>
+      <div class="stat"><div class="k">Current</div><div class="v" id="tcAmp">-- A</div></div>
+      <div class="stat"><div class="k">Temperature</div><div class="v" id="tcTemp">-- °C</div></div>
+      <div class="stat"><div class="k">State</div><div class="v" id="tcFlow" style="font-size:14px">--</div></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="card" style="margin-top:12px">
+  <h2>Live power <span class="muted" id="chartInfo">waiting…</span></h2>
+  <canvas id="chart" height="120"></canvas>
+  <div class="stats" style="grid-template-columns:1fr 1fr 1fr">
+    <div class="stat"><div class="k">Session energy</div><div class="v" id="energy">0.00 Wh</div></div>
+    <div class="stat"><div class="k">Peak draw</div><div class="v" id="peak">-- W</div></div>
+    <div class="stat"><div class="k">Samples</div><div class="v" id="samples">0</div></div>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h2>Automation</h2>
+    <label class="chk"><input type="checkbox" id="chkWake" checked /> Keep screen awake while connected</label>
+    <div class="sep"></div>
+    <div class="row" style="gap:8px">
+      <input type="checkbox" id="chkAlert" />
+      <label for="chkAlert" class="muted" style="cursor:pointer">Alert me below</label>
+      <input type="number" id="alertPct" value="20" min="1" max="99" style="width:76px" />
+      <span class="muted">%</span>
+    </div>
+    <div class="sep"></div>
+    <div class="row" style="gap:8px">
+      <input type="checkbox" id="chkAutoOff" />
+      <label for="chkAutoOff" class="muted" style="cursor:pointer">Auto power-off DC below</label>
+      <input type="number" id="autoOffPct" value="10" min="1" max="99" style="width:76px" />
+      <span class="muted">%</span>
+    </div>
+    <div class="muted" style="margin-top:10px">
+      Runs in this page while it stays open — no cloud, no subscription. Device-side timers
+      (<code>0x06</code>) exist too but this covers the common "don't strand the dish" case.
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Expert / raw access</h2>
+    <div class="row">
+      <input type="text" id="rawCmd" placeholder="hex bytes — e.g. 01 01 01" />
+      <button id="btnRaw" class="ghost">Send + read</button>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button id="btnReadAll" class="ghost sm">Read all telemetry</button>
+      <button id="btnCsv" class="ghost sm">Export CSV</button>
+    </div>
+    <div class="muted" style="margin-top:10px">
+      Frames go to <code>0x4302</code>; response is read back from the same characteristic.
+      Opcodes: <code>01</code> DC control, <code>14</code> DC bypass, <code>13</code> USB-C,
+      <code>10</code> device id, <code>11</code> restart, <code>FE</code> features.
+      Action byte: <code>00</code> get, <code>01</code> set.
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:12px">
+  <details>
+    <summary>Log (<span id="logCount">0</span>)</summary>
+    <pre id="log" style="margin-top:10px"></pre>
+  </details>
+</div>
+
+<div class="card foot">
+  <div><strong>iPhone setup:</strong> install <em>Bluefy</em> (free) from the App Store → open this page in Bluefy → share → <em>Add to Home Screen</em>. Safari cannot do Web Bluetooth; Android Chrome and desktop Chrome/Edge work directly.</div>
+  <div style="margin-top:8px">Unofficial community tool. Not affiliated with, endorsed by, or supported by PeakDo Tech or SpaceX/Starlink. Protocol reference: <code>PROTOCOL.md</code>. Use at your own risk.</div>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
