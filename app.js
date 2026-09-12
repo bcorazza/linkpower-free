@@ -398,7 +398,7 @@ function renderRuntime() {
   const notes = [];
   notes.push(RT.anchorSource === 'open-circuit'
     ? 'Anchored on a true resting voltage' + (RT.openCircuitV ? ` (${RT.openCircuitV.toFixed(2)} V)` : '')
-    : 'Anchored under load — voltage reads ~0.1 V low, so this leans conservative');
+    : 'Anchored under load — sag-corrected using the measured 181 mOhm');
   if (confirmedOff) notes.push('output is off; no runtime to report');
   notes.push(`assumes ${$('rtAh').value} Ah x ${$('rtCount').value} packs at 20 V`);
   notes.push('the pack has no fuel gauge, so treat this as ±10%');
