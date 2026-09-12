@@ -74,7 +74,7 @@ Write to `0x4302`. The response is read back from `0x4302`.
 | `0x15` | DC_BYPASS_THRESHOLD | |
 | `0x17` | GET_USB_FW_VERSION | |
 | `0x19` | LCD_BRIGHTNESS_CTL | |
-| `0x20` | BLUETOOTH_CTL | |
+| `0x20` | BLUETOOTH_CTL | `20 01 01` = switch the device's own BLE radio **off** (releases it from a holding client; requires triple-press to restore) |
 | `0xE0` | RUNNING_MODE_CONTROL | `0` = user, `1` = factory |
 | `0xFE` | FEATURES | capability bitmask |
 
@@ -136,6 +136,19 @@ firmware doesn't expose that feature. Handle both.
 | `BP4SL3` | LinkPower+ |
 | `BP4SL3-D2` | Power Dock with Adapter (DeWalt/Makita/Milwaukee, 2-battery) |
 | `BP4SL3-D4` | Power Dock (4-battery) |
+
+## Device-family differences
+
+The Pack / Power Dock (`BP4SL3-D4`, `BP4SL3-D2`) implements **only the DC port
+telemetry** (`0x4304`). It has no pack gauge and no USB-C port of its own, so
+`0x4303` and `0x4305` are typically absent — treat a failed read/subscribe on
+those as "not on this model", not as an error. The official PWA hard-gates them
+behind `device.model == BP4SL3V1 | BP4SL3V2`, which confirms this.
+
+Also required by the official PWA before it will talk to a device: read the OTA
+info char (`0x4301`, command `84`) and check `mode` — `1` = APP mode, `2` = OTA
+mode. It throws `Unknown mode` otherwise. Worth replicating if a device
+misbehaves.
 
 ## Safety notes
 

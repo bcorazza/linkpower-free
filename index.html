@@ -119,8 +119,8 @@
 
 <div class="grid">
 
-  <div class="card">
-    <h2>DC output · Starlink Mini</h2>
+  <div class="card" id="cardDc">
+    <h2>DC output · Starlink Mini <span id="badgeDc" class="pill hidden">not on this model</span></h2>
     <div class="big"><span id="dcPower">--</span><small>W</small></div>
     <div class="stats">
       <div class="stat"><div class="k">Voltage</div><div class="v" id="dcVolt">-- V</div></div>
@@ -137,8 +137,8 @@
     </div>
   </div>
 
-  <div class="card">
-    <h2>Battery pack</h2>
+  <div class="card" id="cardBat">
+    <h2>Battery pack <span id="badgeBat" class="pill hidden">not on this model</span></h2>
     <div class="big"><span id="batPower">--</span><small>W</small></div>
     <div class="stats">
       <div class="stat"><div class="k">Level</div><div class="v" id="batLevel">-- %</div></div>
@@ -150,8 +150,8 @@
     </div>
   </div>
 
-  <div class="card">
-    <h2>USB-C port</h2>
+  <div class="card" id="cardTc">
+    <h2>USB-C port <span id="badgeTc" class="pill hidden">not on this model</span></h2>
     <div class="big"><span id="tcPower">--</span><small>W</small></div>
     <div class="stats">
       <div class="stat"><div class="k">Voltage</div><div class="v" id="tcVolt">-- V</div></div>
@@ -206,6 +206,15 @@
     <div class="row" style="margin-top:10px">
       <button id="btnReadAll" class="ghost sm">Read all telemetry</button>
       <button id="btnCsv" class="ghost sm">Export CSV</button>
+      <button id="btnFeatures" class="ghost sm">Query capabilities (FE)</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button id="btnBtOff" class="ghost sm">Device Bluetooth OFF (20)</button>
+      <button id="btnRestart" class="ghost sm">Restart (11)</button>
+    </div>
+    <div class="muted" style="margin-top:8px">
+      <strong>Device Bluetooth OFF</strong> releases the pack from whichever client holds it — but you
+      must press the power button 3x again to reconnect. Use it if another app has locked the connection.
     </div>
     <div class="muted" style="margin-top:10px">
       Frames go to <code>0x4302</code>; response is read back from the same characteristic.
@@ -218,7 +227,7 @@
 
 <div class="card" style="margin-top:12px">
   <details>
-    <summary>Log (<span id="logCount">0</span>)</summary>
+    <summary>Log (<span id="logCount">0</span>) <button id="btnCopyLog" class="ghost sm" style="float:right;margin-top:-6px">Copy log</button></summary>
     <pre id="log" style="margin-top:10px"></pre>
   </details>
 </div>

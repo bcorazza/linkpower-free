@@ -92,6 +92,29 @@ const flowInfo = (s) => (s === 1 ? ['chg','▲ charging'] : s === 2 ? ['dis','�
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/** Render a thrown value with as much detail as the platform gives us —
+ *  DOMException name matters: SecurityError means pairing/PIN, not a bad frame. */
+function describeError(e) {
+  if (!e) return 'unknown error';
+  if (typeof e === 'string') return e;
+  const bits = [];
+  if (e.name) bits.push(e.name);
+  if (e.message) bits.push(e.message);
+  if (e.code !== undefined && e.code !== null) bits.push('code=' + e.code);
+  return bits.length ? bits.join(': ') : String(e);
+}
+
+function isAuthError(e) {
+  const t = (e && (e.name || '') + ' ' + (e.message || '')) + ' ' + String(e);
+  return /security|auth|pin|not.?permitted|insufficient|encrypt/i.test(t);
+}
+
+/** Characteristics this model doesn't implement (the Pack has no pack-gauge
+ *  or USB-C telemetry — only the DC port). */
+const MISSING = new Set();
+
+function markMissing(uuid) { MISSING.add(uuid); render(); }
+
 // --------------------------------------------------------------------------
 // GATT plumbing
 // --------------------------------------------------------------------------
@@ -313,6 +336,10 @@ function render() {
     $('chartInfo').textContent = new Date().toLocaleTimeString([], { hour12:false });
   }
 
+  $('badgeBat').classList.toggle('hidden', !MISSING.has(CHR_EXT_BAT));
+  $('badgeTc').classList.toggle('hidden', !MISSING.has(CHR_TYPEC));
+  $('badgeDc').classList.toggle('hidden', !MISSING.has(CHR_DC_PORT));
+
   const live = S.demo || !!S.device;
   $('btnDcOn').disabled = !live;
   $('btnDcOff').disabled = !live;
@@ -421,7 +448,7 @@ async function reconnect() {
     if (!devices.length) { connect(); return; }
     await attach(devices[0]);
   } catch (e) {
-    log('reconnect failed: ' + e.message);
+    log('reconnect failed -> ' + describeError(e));
     connect();
   }
 }
@@ -453,9 +480,12 @@ async function startTelemetry() {
   const subs = [ [CHR_EXT_BAT, parseExtBatteryInfo], [CHR_DC_PORT, parseDcPortStatus],
                  [CHR_TYPEC, parseTypeCPortStatus] ];
   for (const [uuid, fn] of subs) {
-    try { await readChar(uuid); } catch (e) { log('read 0x' + uuid.toString(16) + ' failed: ' + e.message); }
-    try { await subscribe(uuid, fn); log('subscribed 0x' + uuid.toString(16)); }
-    catch (e) { log('subscribe 0x' + uuid.toString(16) + ' failed: ' + e.message); }
+    let ok = false;
+    try { await readChar(uuid); ok = true; }
+    catch (e) { log('read 0x' + uuid.toString(16) + ' failed -> ' + describeError(e)); }
+    try { await subscribe(uuid, fn); log('subscribed 0x' + uuid.toString(16)); ok = true; }
+    catch (e) { log('subscribe 0x' + uuid.toString(16) + ' failed -> ' + describeError(e)); }
+    if (!ok) { markMissing(uuid); log('0x' + uuid.toString(16) + ' not implemented on this model'); }
   }
   try { await readChar(CHR_LINKPOWER, true); } catch (e) {}
   render();
@@ -484,16 +514,22 @@ async function setDc(on) {
     await send([CMD.DC_CONTROL, ACT.SET, on ? 1 : 0]);
     S.autoOffFired = !on ? S.autoOffFired : false;
     await sleep(150);
-    try { await readChar(CHR_DC_PORT); } catch (e) {}
+    try { await readChar(CHR_DC_PORT); } catch (e) { log('post-toggle read failed -> ' + describeError(e)); }
     // Authoritative re-read of telemetry after a state change.
     if (S.dc.enabled !== on) {
       await sleep(250);
-      try { await readChar(CHR_DC_PORT); } catch (e) {}
+      try { await readChar(CHR_DC_PORT); } catch (e) { log('confirm read failed -> ' + describeError(e)); }
+      if (S.dc.enabled !== on) {
+        log('WARNING: DC state did not change after SET (requested ' + (on ? 'ON' : 'OFF') + ')');
+        banner('warn', 'The command was accepted but the DC state did not change — the pack may need '
+                     + 'pairing (PIN 020555) or may refuse this while another mode is active.');
+      }
     }
     banner('ok', 'DC output commanded ' + (on ? 'ON' : 'OFF') + '.');
   } catch (e) {
-    const msg = String(e.message || e);
-    if (/security|auth|pin|not.?permitted|insufficient/i.test(msg)) {
+    log('setDc failed -> ' + describeError(e));
+    const msg = describeError(e);
+    if (isAuthError(e)) {
       banner('warn', 'macOS is asking to pair for this action — enter PIN 020555, then press Power ON/OFF again.');
     } else {
       banner('warn', 'DC control failed: ' + msg);
@@ -503,13 +539,63 @@ async function setDc(on) {
   }
 }
 
+/** Query the device capability bitmask (0xFE GET). */
+async function queryFeatures() {
+  if (S.demo) { log('demo: features query'); return; }
+  try {
+    const v = await send([CMD.FEATURES, ACT.GET]);
+    if (v && v.byteLength >= 7) {
+      const flags = v.getUint32(3, true);
+      log('features bitmask = 0x' + flags.toString(16));
+      banner('info', 'Device capabilities: 0x' + flags.toString(16));
+    } else if (v) {
+      log('features response too short: ' + v.byteLength + ' bytes');
+    }
+  } catch (e) { banner('warn', 'Features query failed: ' + describeError(e)); }
+}
+
+/** 0x20 SET 1 switches the pack's own Bluetooth radio off. Useful to release
+ *  the device from another client — but you must triple-press to get it back. */
+async function turnOffDeviceBluetooth() {
+  if (!confirm('Switch OFF the pack\'s Bluetooth radio?\n\nThis frees it from another client, '
+             + 'but you will need to press the power button 3x again to reconnect.')) return;
+  if (S.demo) { log('demo: bluetooth off'); return; }
+  try {
+    await send([CMD.BLUETOOTH_CTL, ACT.SET, 1], false);
+    banner('warn', 'Bluetooth-off command sent. Triple-press the power button to bring it back.');
+  } catch (e) { banner('warn', 'Bluetooth-off failed: ' + describeError(e)); }
+}
+
+async function restartDevice() {
+  if (!confirm('Restart the pack?')) return;
+  if (S.demo) { log('demo: restart'); return; }
+  try {
+    await send([CMD.RESTART, ACT.SET], false);
+    banner('warn', 'Restart command sent.');
+  } catch (e) { banner('warn', 'Restart failed: ' + describeError(e)); }
+}
+
+async function copyLog() {
+  const text = $('log').textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+    banner('ok', 'Log copied to clipboard (' + text.split('\n').length + ' lines).');
+  } catch (e) {
+    const r = document.createRange();
+    r.selectNodeContents($('log'));
+    const sel = window.getSelection();
+    sel.removeAllRanges(); sel.addRange(r);
+    banner('info', 'Clipboard blocked — log selected, press Cmd+C to copy.');
+  }
+}
+
 async function sendRaw() {
   const raw = $('rawCmd').value.trim();
   if (!raw) return;
   const bytes = raw.split(/[\s,]+/).map((h) => parseInt(h, 16));
   if (bytes.some((b) => Number.isNaN(b) || b < 0 || b > 255)) { banner('warn', 'Invalid hex.'); return; }
   if (S.demo) { log('demo: would write', bytes); return; }
-  try { await send(bytes); } catch (e) { banner('warn', 'Write failed: ' + e.message); }
+  try { await send(bytes); } catch (e) { banner('warn', 'Write failed: ' + describeError(e)); }
 }
 
 async function readAllTelemetry() {
@@ -640,6 +726,10 @@ $('btnDcOn').addEventListener('click', () => setDc(true));
 $('btnDcOff').addEventListener('click', () => setDc(false));
 $('btnRaw').addEventListener('click', sendRaw);
 $('btnDump').addEventListener('click', dumpGatt);
+$('btnFeatures').addEventListener('click', queryFeatures);
+$('btnBtOff').addEventListener('click', turnOffDeviceBluetooth);
+$('btnRestart').addEventListener('click', restartDevice);
+$('btnCopyLog').addEventListener('click', copyLog);
 $('btnReadAll').addEventListener('click', readAllTelemetry);
 $('btnCsv').addEventListener('click', exportCsv);
 $('btnDemo').addEventListener('click', startDemo);
