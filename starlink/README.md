@@ -1,5 +1,7 @@
 # Starlink Test
 
+![Starlink Test app showing live dish telemetry, latency probes and ICMP ping](screenshot.png)
+
 A connection reliability monitor for a Starlink Mini on WiFi. Live dish telemetry,
 internet latency/jitter/loss probing, real ICMP ping, outage logging, CSV export.
 
