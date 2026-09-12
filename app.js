@@ -111,7 +111,14 @@ async function send(bytes, readBack = true) {
   try {
     await c.writeValueWithoutResponse(payload);
   } catch (e) {
-    await c.writeValueWithResponse(payload);
+    try {
+      await c.writeValueWithResponse(payload);
+    } catch (e2) {
+      if (/security|auth|pin|not.?permitted|insufficient/i.test(e2.message || '')) {
+        banner('warn', 'This action needs pairing. Enter the device PIN 020555 when your OS asks, then try again.');
+      }
+      throw e2;
+    }
   }
   if (!readBack) return null;
   // The firmware needs a beat between write and read; retry once.
@@ -389,7 +396,12 @@ async function connect() {
     $('status').textContent = 'scanning…';
     const opts = all
       ? { acceptAllDevices: true, optionalServices: optional }
-      : { filters: [ { services:[SVC_LINKPOWER] }, { namePrefix:'Link-Power' }, { namePrefix:'LinkPower' } ],
+      : { filters: [
+            { services:[SVC_LINKPOWER] },
+            { namePrefix:'Link' },        // "Link-Power" (LP1/2/3) and "Link Power Pack" (dock)
+            { namePrefix:'LinkPower' },
+            { namePrefix:'BP4SL3' }
+          ],
           optionalServices: optional };
     const device = await navigator.bluetooth.requestDevice(opts);
     await attach(device);
@@ -480,7 +492,12 @@ async function setDc(on) {
     }
     banner('ok', 'DC output commanded ' + (on ? 'ON' : 'OFF') + '.');
   } catch (e) {
-    banner('warn', 'DC control failed: ' + e.message);
+    const msg = String(e.message || e);
+    if (/security|auth|pin|not.?permitted|insufficient/i.test(msg)) {
+      banner('warn', 'macOS is asking to pair for this action — enter PIN 020555, then press Power ON/OFF again.');
+    } else {
+      banner('warn', 'DC control failed: ' + msg);
+    }
   } finally {
     busy = false;
   }

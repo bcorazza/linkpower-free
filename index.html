@@ -97,6 +97,21 @@
   <label class="chk"><input type="checkbox" id="chkAll" /> Show all nearby Bluetooth devices (use if your device isn't listed)</label>
 </div>
 
+<div class="card" style="margin-top:12px;border-color:#2b4a5e">
+  <h2>Before you scan — LinkPower Pack (BP4SL3-D4)</h2>
+  <div class="kv">
+    <div class="k">1. Enable Bluetooth</div><div class="v">Press the power button THREE times in quick succession</div>
+    <div class="k">2. Check the LED icon</div><div class="v">must be lit white — not green or dim grey</div>
+    <div class="k">3. Device name</div><div class="v">appears as “Link Power Pack”</div>
+    <div class="k">4. If prompted for a PIN</div><div class="v">020555 (default, needed once for advanced actions)</div>
+    <div class="k">Manual DC toggle</div><div class="v">hold the power button 2s (LED flashes twice)</div>
+  </div>
+  <div class="muted" style="margin-top:10px">
+    Bluetooth stays off until step 1 — that is why a scan finds nothing on a freshly powered pack.
+    If it still doesn't appear, tick the box above to list every nearby BLE device.
+  </div>
+</div>
+
 <div id="deviceCard" class="card hidden" style="margin-top:14px">
   <h2>Device <button id="btnDump" class="ghost sm">Dump GATT tree</button></h2>
   <div class="kv" id="devInfo"></div>
