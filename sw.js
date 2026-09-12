@@ -1,5 +1,6 @@
-// Minimal app-shell cache so the tool still opens without a network.
-const CACHE = 'linkpower-free-v1';
+// App-shell cache so the tool still opens with no network. Network-first, so
+// a new deployment is picked up immediately instead of serving a stale shell.
+const CACHE = 'linkpower-free-v2';
 const ASSETS = ['./', './index.html', './app.js', './manifest.webmanifest',
                 './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'];
 
@@ -16,15 +17,12 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   e.respondWith(
-    caches.match(e.request).then((hit) => {
-      const net = fetch(e.request).then((res) => {
-        if (res && res.ok && res.type === 'basic') {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(e.request, copy));
-        }
-        return res;
-      }).catch(() => hit);
-      return hit || net;
-    })
+    fetch(e.request).then((res) => {
+      if (res && res.ok && res.type === 'basic') {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(e.request, copy));
+      }
+      return res;
+    }).catch(() => caches.match(e.request).then((hit) => hit || caches.match('./index.html')))
   );
 });

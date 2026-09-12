@@ -9,6 +9,10 @@ telemetry, USB-C status, power charting, low-battery alerting and auto-shutoff â
 all over Bluetooth, all client-side. No account, no server, no analytics, no
 subscription.
 
+## Live
+
+<https://bcorazza.github.io/linkpower-free/>
+
 ## Why this exists
 
 The hardware's control protocol is fully exposed by PeakDo's own **public** Web
