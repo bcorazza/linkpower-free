@@ -170,6 +170,31 @@ and byte 2 is a status/error code. The capability query (`FE 00`) returned `fe 8
 — 3 bytes, below the 7 the official PWA requires, so it takes the "features unknown"
 path and falls back to inferring capability from frame lengths. Do the same.
 
+### The command characteristic requires an ACKNOWLEDGED write
+
+`0x4302` exposes **`read` + `write` only — no `write without response`**:
+
+```
+chr 00004302-...  write read
+```
+
+PeakDo's own client therefore uses `writeValueWithResponse` (its `write()` helper
+defaults `withoutResponse = false`). Sending a no-response write can be silently
+accepted by the OS and ignored by the device, which looks exactly like "the button
+did nothing". Always use an acknowledged write.
+
+Verified toggle on hardware:
+
+```
+BEFORE     enabled=True  status=2  V=20.05  A=1.62  W=32.50
+DC OFF 01 01 00  -> ACK 018100
+AFTER OFF  enabled=False status=0  V=19.89  A=0.00  W=0.00
+DC ON  01 01 01  -> ACK 018100
+AFTER ON   enabled=True  status=2  V=20.30  A=0.44  W=8.86   (dish booting)
+```
+
+Note the ACK does **not** echo the resulting state — read `0x4304` back to confirm.
+
 ### Notifications are change-driven, not periodic
 
 `start_notify` on `0x4304` is accepted but produced **zero frames in 3 seconds**

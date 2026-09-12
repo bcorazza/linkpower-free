@@ -132,17 +132,24 @@ async function send(bytes, readBack = true) {
   const c = await getChar(CHR_LINKPOWER);
   const payload = new Uint8Array(bytes);
   log('→ write 0x4302', toHex(new DataView(payload.buffer)));
+  // The LinkPower command characteristic advertises "write" only — NOT
+  // "write without response". PeakDo's own app uses an acknowledged write.
+  // Sending without response can be silently accepted by the OS and ignored
+  // by the device, which looks exactly like "the button did nothing".
+  const props = c.properties || {};
   try {
-    await c.writeValueWithoutResponse(payload);
-  } catch (e) {
-    try {
+    if (props.write) {
       await c.writeValueWithResponse(payload);
-    } catch (e2) {
-      if (/security|auth|pin|not.?permitted|insufficient/i.test(e2.message || '')) {
-        banner('warn', 'This action needs pairing. Enter the device PIN 020555 when your OS asks, then try again.');
-      }
-      throw e2;
+    } else if (props.writeWithoutResponse) {
+      await c.writeValueWithoutResponse(payload);
+    } else {
+      throw new Error('characteristic 0x4302 is not writable');
     }
+  } catch (e) {
+    if (isAuthError(e)) {
+      banner('warn', 'This action needs pairing. Enter the device PIN 020555 when your OS asks, then try again.');
+    }
+    throw e;
   }
   if (!readBack) return null;
   // Observed ACK: 01 81 00  ->  [opcode, 0x80|SET, status]   (status 0 = OK)
