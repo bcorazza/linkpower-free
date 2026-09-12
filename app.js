@@ -1,6 +1,11 @@
 // LinkPower Free — web Bluetooth monitor/control for PeakDo Link-Power hardware.
 // Protocol extracted from PeakDo's own public Web Bluetooth app; see PROTOCOL.md.
 
+import {
+  socFromVoltage, openCircuitVoltage, packEnergyWh, countDownSoc, remainingWh,
+  runtimeHours, formatRuntime, CELLS,
+} from './soc.js';
+
 // --------------------------------------------------------------------------
 // Protocol constants
 // --------------------------------------------------------------------------
@@ -303,6 +308,113 @@ function drawChart() {
   }
 }
 
+
+// --------------------------------------------------------------------------
+// Battery runtime estimate
+//
+// The Pack / Power Dock has no fuel gauge: 0x4303 (extended battery info) does
+// not exist on the BP4SL3, so the only battery signal available is the DC port
+// voltage. Two things make that workable:
+//   1. The port runs 15-21 V, which is exactly a 5S Li-ion pack (3.0-4.2 V/cell),
+//      so the port voltage IS the DeWalt pack voltage.
+//   2. With the DC output switched OFF the port still reports the pack voltage
+//      (~19.9 V observed), i.e. a true open-circuit reading.
+//
+// Method: voltage gives an absolute anchor, then coulomb counting carries it
+// between anchors. Pure voltage is noisy under changing load; pure counting
+// drifts. Anchoring on voltage and integrating energy is the standard fix.
+// --------------------------------------------------------------------------
+
+const RT = {
+  anchorSoc: null,        // % at the moment of anchoring
+  anchorEnergyWh: null,   // session energy counter when anchored
+  anchorSource: null,     // 'open-circuit' | 'loaded'
+  openCircuitV: null,     // best resting voltage seen
+  last: null,
+};
+
+const rtPacks = () => Math.max(1, Math.min(4, Number($('rtCount').value) || 2));
+const rtTotalWh = () => packEnergyWh(Number($('rtAh').value) || 5, rtPacks());
+const rtSocOf = (v, a, enabled) => socFromVoltage(v, a, enabled, rtPacks());
+
+function rtAnchor(volts, amps, enabled) {
+  const soc = rtSocOf(volts, amps, enabled);
+  const ocv = openCircuitVoltage(volts, amps, enabled, rtPacks());
+  RT.anchorSoc = soc;
+  RT.anchorEnergyWh = S.energyWh;
+  RT.anchorSource = (enabled && amps > 0.05) ? 'loaded' : 'open-circuit';
+  if (!enabled) RT.openCircuitV = volts;          // a genuine resting sample
+  log(`runtime re-anchored: ${soc.toFixed(0)}% (${RT.anchorSource}, ocv ${ocv.toFixed(2)} V)`);
+}
+
+function renderRuntime() {
+  const v = S.dc.voltage, a = S.dc.current, w = S.dc.power;
+  const enabled = S.dc.enabled === true;      // null = unknown, NOT off
+  const confirmedOff = S.dc.enabled === false;
+  const totalWh = rtTotalWh();
+
+  if (v === null || v === undefined) {
+    $('rtBadge').className = 'pill'; $('rtBadge').textContent = 'no data';
+    $('rtRemain').textContent = '--';
+    ['rtSoc', 'rtVolt', 'rtCell', 'rtEnergy', 'rtUsed', 'rtDraw'].forEach((i) => { $(i).textContent = '--'; });
+    $('rtNote').textContent = 'Connect to the battery to estimate runtime.';
+    return;
+  }
+
+  // Anchor on the first reading, and re-anchor whenever we get a true resting voltage.
+  if (RT.anchorSoc === null) rtAnchor(v, a || 0, enabled);
+  // Only a confirmed OFF output gives a true resting voltage. An unknown state
+  // would otherwise make us treat a loaded reading as open-circuit and report 0%.
+  if (confirmedOff && v > 10 && (RT.openCircuitV === null || Math.abs(v - RT.openCircuitV) > 0.05)) {
+    rtAnchor(v, 0, false);
+  }
+
+  // Coulomb counting from the anchor: clamp so a bad reading cannot go negative.
+  const usedWh = Math.max(0, S.energyWh - (RT.anchorEnergyWh ?? S.energyWh));
+  const soc = countDownSoc(RT.anchorSoc, usedWh, totalWh) ?? 0;
+  const leftWh = remainingWh(soc, totalWh);
+  const drawW = Math.abs(w || 0);
+
+  $('rtSoc').textContent = soc.toFixed(0) + ' %';
+  $('rtVolt').textContent = v.toFixed(2) + ' V';
+  $('rtCell').textContent = (v / CELLS).toFixed(3) + ' V';
+  $('rtEnergy').textContent = leftWh.toFixed(1) + ' / ' + totalWh.toFixed(0) + ' Wh';
+  $('rtUsed').textContent = usedWh.toFixed(2) + ' Wh';
+  $('rtDraw').textContent = drawW.toFixed(1) + ' W';
+
+  if (drawW > 1 && enabled) {
+    const { value, unit } = formatRuntime(runtimeHours(leftWh, drawW));
+    $('rtRemain').textContent = value;
+    $('rtRemainUnit').textContent = unit;
+    $('rtBadge').className = 'pill ' + (soc < 15 ? 'bad' : soc < 35 ? 'warn' : 'on');
+    $('rtBadge').textContent = soc < 15 ? 'low' : soc < 35 ? 'getting low' : 'on track';
+  } else {
+    $('rtRemain').textContent = 'idle';
+    $('rtRemainUnit').textContent = '';
+    $('rtBadge').className = 'pill';
+    $('rtBadge').textContent = confirmedOff ? 'output off' : (S.dc.enabled === null ? 'no data' : 'no draw');
+  }
+
+  const notes = [];
+  notes.push(RT.anchorSource === 'open-circuit'
+    ? 'Anchored on a true resting voltage' + (RT.openCircuitV ? ` (${RT.openCircuitV.toFixed(2)} V)` : '')
+    : 'Anchored under load — voltage reads ~0.1 V low, so this leans conservative');
+  if (confirmedOff) notes.push('output is off; no runtime to report');
+  notes.push(`assumes ${$('rtAh').value} Ah x ${$('rtCount').value} packs at 20 V`);
+  notes.push('the pack has no fuel gauge, so treat this as ±10%');
+  $('rtNote').textContent = notes.join(' · ');
+}
+
+function rtSaveSettings() {
+  try {
+    localStorage.setItem('lpRuntime', JSON.stringify({
+      ah: $('rtAh').value, count: $('rtCount').value,
+    }));
+  } catch (e) {}
+  RT.anchorSoc = null;   // capacity changed -> re-anchor
+  renderRuntime();
+}
+
 // --------------------------------------------------------------------------
 // Render
 // --------------------------------------------------------------------------
@@ -348,6 +460,8 @@ function render() {
   $('badgeBat').classList.toggle('hidden', !MISSING.has(CHR_EXT_BAT));
   $('badgeTc').classList.toggle('hidden', !MISSING.has(CHR_TYPEC));
   $('badgeDc').classList.toggle('hidden', !MISSING.has(CHR_DC_PORT));
+
+  renderRuntime();
 
   const live = S.demo || !!S.device;
   $('btnDcOn').disabled = !live;
@@ -743,16 +857,17 @@ function startDemo() {
   $('status').textContent = 'demo';
   banner('warn', 'Demo mode — simulated data. Nothing is connected.');
   let t = 0;
+  S.dc.enabled = true;              // demo starts with the output on
   const tick = () => {
     if (!S.demo) return;
     t += 0.02;
     const on = S.dc.enabled !== false;
-    S.dc.voltage = 12.9 - t * 0.3;
-    S.dc.current = on ? 2.4 + Math.sin(t * 3) * 0.15 : 0;
+    S.dc.voltage = 20.6 - t * 0.08;          // 5S Li-ion, drifting down slowly
+    S.dc.current = on ? 1.62 + Math.sin(t * 3) * 0.08 : 0;
     S.dc.power = S.dc.voltage * S.dc.current;
     S.dc.status = on ? 2 : 0;
     S.dc.bypass = false;
-    S.bat.voltage = 13.0 - t * 0.4;
+    S.bat.voltage = 20.7 - t * 0.09;
     S.bat.current = S.dc.current;
     S.bat.power = S.bat.voltage * S.bat.current;
     S.bat.level = Math.max(0, Math.round(88 - t * 4));
@@ -783,6 +898,14 @@ $('btnFeatures').addEventListener('click', queryFeatures);
 $('btnBtOff').addEventListener('click', turnOffDeviceBluetooth);
 $('btnRestart').addEventListener('click', restartDevice);
 $('btnCopyLog').addEventListener('click', copyLog);
+$('rtReset').addEventListener('click', () => { RT.anchorSoc = null; RT.anchorEnergyWh = null;
+  log('runtime estimate re-anchored on demand'); renderRuntime(); });
+$('rtAh').addEventListener('change', rtSaveSettings);
+$('rtCount').addEventListener('change', rtSaveSettings);
+try {
+  const saved = JSON.parse(localStorage.getItem('lpRuntime') || 'null');
+  if (saved) { $('rtAh').value = saved.ah; $('rtCount').value = saved.count; }
+} catch (e) {}
 $('btnReadAll').addEventListener('click', readAllTelemetry);
 $('btnCsv').addEventListener('click', exportCsv);
 $('btnDemo').addEventListener('click', startDemo);

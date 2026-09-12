@@ -228,6 +228,41 @@ info char (`0x4301`, command `84`) and check `mode` — `1` = APP mode, `2` = OT
 mode. It throws `Unknown mode` otherwise. Worth replicating if a device
 misbehaves.
 
+## Battery state of charge — there is no fuel gauge
+
+The Pack / Power Dock (`BP4SL3`) does **not** implement `0x4303`
+(EXT_BATTERY_INFO), so there is no fuel-gauge reading to fetch: no percentage,
+no remaining-energy field. PeakDo's own PWA gates that characteristic to
+`BP4SL3V1 | BP4SL3V2` only.
+
+What you *can* use is the DC port voltage, for two reasons:
+
+1. The port runs **15–21 V**, which is exactly a **5S Li-ion** pack
+   (3.0–4.2 V/cell). The port voltage *is* the DeWalt pack voltage.
+2. With the DC output switched **off**, the port still reports the pack voltage
+   (measured: `enabled=False, V=19.89, A=0.00`) — i.e. a true open-circuit sample.
+
+### Method used by the app (`soc.js`)
+
+- **Voltage → SoC** via an open-circuit-voltage lookup table for Li-ion,
+  used as an absolute anchor.
+- **Load sag** corrected with `V_ocv = V_measured + I × R`, `R ≈ 0.06 Ω`
+  (packs in parallel). At the ~32 W this setup draws (1.6 A) the correction is
+  only ~0.1 V, so voltage-based SoC is unusually reliable here.
+- **Coulomb counting** carries the anchor between voltage samples:
+  `SoC = anchor − (Wh used ÷ nameplate Wh) × 100`. Pure voltage is noisy under
+  changing load; pure counting drifts. Anchoring on voltage and integrating
+  energy is the standard fix.
+- Re-anchors automatically whenever a genuine resting voltage appears
+  (output confirmed off), and on demand via **Re-anchor**.
+
+Energy maths uses **20 V** per pack to match how DeWalt labels 20V MAX capacity
+(e.g. a 5.0 Ah pack is sold as 100 Wh).
+
+Accuracy: roughly ±10%. It assumes the packs are healthy, balanced and similar —
+one weak pack in a 4-pack dock will drag the real runtime below the estimate.
+The curve is covered by `tests/soc.test.mjs` (21 assertions).
+
 ## Safety notes
 
 - Only one BLE client can hold the connection. Close other apps before connecting.

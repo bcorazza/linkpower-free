@@ -161,6 +161,27 @@
     </div>
   </div>
 
+  <div class="card" id="cardRuntime">
+    <h2>Battery runtime estimate <span id="rtBadge" class="pill">no data</span></h2>
+    <div class="big"><span id="rtRemain">--</span><small id="rtRemainUnit"></small></div>
+    <div class="stats">
+      <div class="stat"><div class="k">State of charge</div><div class="v" id="rtSoc">--</div></div>
+      <div class="stat"><div class="k">Pack voltage</div><div class="v" id="rtVolt">-- V</div></div>
+      <div class="stat"><div class="k">Per cell</div><div class="v" id="rtCell">-- V</div></div>
+      <div class="stat"><div class="k">Energy left</div><div class="v" id="rtEnergy">--</div></div>
+      <div class="stat"><div class="k">Used this session</div><div class="v" id="rtUsed">--</div></div>
+      <div class="stat"><div class="k">Draw now</div><div class="v" id="rtDraw">-- W</div></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <label class="muted" for="rtAh">Ah per pack</label>
+      <input type="number" id="rtAh" value="5" min="1" max="15" step="0.5" style="width:76px" />
+      <label class="muted" for="rtCount">packs installed</label>
+      <input type="number" id="rtCount" value="2" min="1" max="4" style="width:60px" />
+      <button id="rtReset" class="ghost sm">Re-anchor</button>
+    </div>
+    <div class="muted" style="margin-top:10px" id="rtNote"></div>
+  </div>
+
 </div>
 
 <div class="card" style="margin-top:12px">
