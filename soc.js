@@ -3,7 +3,13 @@
 // Kept dependency-free and DOM-free so it can be unit tested (tests/soc.test.mjs).
 
 export const CELLS = 5;               // DeWalt 20V MAX packs are 5S Li-ion
-export const DEFAULT_R_OHM = 0.06;    // packs in parallel; ~0.1 V of sag at 1.6 A
+// Measured on real hardware (2026-09-12, 2 packs installed) by fitting
+// V = a - R*I across a 0.55-1.67 A load swing: R = 0.181 ohm, R^2 = 0.70.
+// Far higher than a fresh 5 Ah pack implies (~0.1 ohm each, halved in
+// parallel), so the packs are aged and/or the dock adds series resistance.
+// This directly shifts the state-of-charge estimate by ~10 points, which is
+// why it is measured rather than assumed.
+export const R_OHM_AT_2_PACKS = 0.181;
 export const WH_PER_PACK_VOLTS = 20;  // DeWalt label 20V MAX capacity at 20 V
 
 // Open-circuit voltage per cell -> state of charge for Li-ion.
@@ -35,7 +41,7 @@ export function socFromCellVolts(v) {
 export function openCircuitVoltage(volts, amps, enabled, packs = 2) {
   if (!Number.isFinite(volts)) return null;
   if (!enabled || !(amps > 0.05)) return volts;
-  const r = DEFAULT_R_OHM * (2 / Math.max(1, Math.min(4, packs)));
+  const r = R_OHM_AT_2_PACKS * (2 / Math.max(1, Math.min(4, packs)));
   return volts + amps * r;
 }
 

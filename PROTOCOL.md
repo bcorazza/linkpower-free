@@ -242,6 +242,41 @@ What you *can* use is the DC port voltage, for two reasons:
 2. With the DC output switched **off**, the port still reports the pack voltage
    (measured: `enabled=False, V=19.89, A=0.00`) — i.e. a true open-circuit sample.
 
+### There is no pack/slot count on the BLE interface
+
+Confirmed by enumerating every service and characteristic on a real unit, then
+sweeping every read-only opcode:
+
+```
+0x01 GET -> 01 80 00 01            supported   DC output state
+0x02 GET -> 02 80 9c               not implemented
+0x03 GET -> 03 80 00 ff            supported
+0x05 GET -> 05 80 9c               not implemented
+0x06 GET -> 06 80 ff 03            supported
+0x10 GET -> 10 80 00 52bee0f517c8  supported   DEVICE_ID
+0x12 GET -> 12 80 9c               not implemented
+0x15 GET -> 15 80 9c               not implemented
+0x17 GET -> 17 80 9c               not implemented
+0x18 GET -> 18 80 9c               not implemented
+0x19 GET -> 19 80 9c               not implemented
+0xFE GET -> fe 80 9c               not implemented
+```
+
+Nothing reports how many packs are installed. That is consistent with the
+hardware: the dock parallels the packs onto one 20 V bus, so the DC telemetry is
+a single bus measurement and telling packs apart would need per-slot sensing.
+The app therefore asks the user for **packs installed**.
+
+`0x10` returns the device MAC. Measured `52 be e0 f5 17 c8`, which is exactly the
+BLE address `C8:17:F5:E0:BE:52` byte-reversed — confirming the note in PeakDo's
+own source that the "device ID" is the MAC address.
+
+The one indirect signal is **internal resistance**, which packs in parallel
+divide. Measured on a 2-pack setup by fitting `V = a - R*I` over a 0.55-1.67 A
+load swing: **R = 0.181 ohm** (R^2 = 0.70). That is well above what fresh packs
+imply, so pack age and dock/wiring resistance dominate — too confounded to count
+packs with, but good enough to calibrate the sag correction.
+
 ### Method used by the app (`soc.js`)
 
 - **Voltage → SoC** via an open-circuit-voltage lookup table for Li-ion,
