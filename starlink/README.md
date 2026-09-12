@@ -72,6 +72,23 @@ Response fields decoded by the agent:
 `utc_offset_s` is a protobuf **int32**; read as unsigned it wraps to 2^64, so the
 agent sign-extends it (yours reads −18000 = US Eastern).
 
+## `downlink_throughput_bps` / `uplink_throughput_bps` are NOT a speed test
+
+These two fields are **instantaneous samples** — "most recent sample value" in
+starlink-grpc-tools' own words. The dish samples what is flowing at that moment,
+so at idle they read near zero and are not comparable to speedtest.net.
+
+Measured directly (2026-09-12) while polling the dish once a second:
+
+```
+idle:                          0.02 – 0.98 Mbps
+downloading 40 MB (118 Mbps):  53.9 -> 136.3 -> 164.9 Mbps
+```
+
+The number is correct; it just answers "how much is moving right now", not "how
+fast can this link go". The app labels them **now**, holds a session **peak**, and
+provides real Download / Upload speed tests against Cloudflare for capacity.
+
 ## Caveats
 
 - Internet probes are HTTPS round trips (DNS + TCP + TLS + response). Connections

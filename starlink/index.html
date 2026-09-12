@@ -85,10 +85,17 @@
     <div class="stats">
       <div class="stat"><div class="k">Drop rate</div><div class="v" id="dishDrop">--</div></div>
       <div class="stat"><div class="k">Obstructed</div><div class="v" id="dishObstr">--</div></div>
-      <div class="stat"><div class="k">Downlink</div><div class="v" id="dishDown">--</div></div>
-      <div class="stat"><div class="k">Uplink</div><div class="v" id="dishUp">--</div></div>
+      <div class="stat"><div class="k">Downlink · now</div><div class="v" id="dishDown">--</div></div>
+      <div class="stat"><div class="k">Uplink · now</div><div class="v" id="dishUp">--</div></div>
+      <div class="stat"><div class="k">Peak down</div><div class="v" id="dishPeakDown">--</div></div>
+      <div class="stat"><div class="k">Peak up</div><div class="v" id="dishPeakUp">--</div></div>
       <div class="stat"><div class="k">Uptime</div><div class="v" id="dishUptime">--</div></div>
       <div class="stat"><div class="k">Signal</div><div class="v" id="dishSignal">--</div></div>
+    </div>
+    <div class="muted" style="margin-top:10px">
+      <strong>Live, not capacity.</strong> The dish reports the throughput of its most recent
+      sample — roughly zero when nothing is transferring. Use the speed test below to measure
+      what the link can actually do.
     </div>
     <div class="muted mono" id="dishDev" style="margin-top:12px">—</div>
     <div class="muted" id="dishNote" style="margin-top:8px"></div>
@@ -140,12 +147,15 @@
     <h2>Session</h2>
     <div class="row">
       <button id="btnThroughput" class="ghost sm">Download test</button>
+      <button id="btnUpload" class="ghost sm">Upload test</button>
       <button id="btnCsv" class="ghost sm">Export CSV</button>
       <button id="btnClear" class="ghost sm">Clear</button>
     </div>
     <div class="stats" style="margin-top:12px">
       <div class="stat"><div class="k">Download</div><div class="v" id="tput">--</div></div>
+      <div class="stat"><div class="k">Upload</div><div class="v" id="uput">--</div></div>
       <div class="stat"><div class="k">Outages</div><div class="v" id="outageCount">0</div></div>
+      <div class="stat"><div class="k">Speed-test ping</div><div class="v" id="stPing">--</div></div>
     </div>
     <div class="row" style="margin-top:12px">
       <span class="muted">Probe every</span>

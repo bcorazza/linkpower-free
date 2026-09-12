@@ -25,6 +25,8 @@ const S = {
   lastDish: null,
   dishOk: false,
   outages: 0,
+  peakDown: 0,
+  peakUp: 0,
 };
 
 // ---------------------------------------------------------------- utilities
@@ -177,6 +179,10 @@ async function pollDish() {
     if (!j.ok) throw new Error(j.error || 'dish error');
     S.lastDish = { ...j, at: Date.now() };
     S.dishOk = true;
+    // The dish reports an instantaneous sample, so hold the peak to show what
+    // the link has actually demonstrated during this session.
+    S.peakDown = Math.max(S.peakDown, j.downlink_throughput_bps || 0);
+    S.peakUp = Math.max(S.peakUp, j.uplink_throughput_bps || 0);
   } catch (e) {
     if (S.dishOk) addLog('dish', 'lost dish telemetry: ' + e.message);
     S.dishOk = false;
@@ -193,7 +199,8 @@ function renderDish() {
   if (!d) {
     pill.className = 'pill bad'; pill.textContent = 'dish unreachable';
     $('dishLatency').textContent = '--';
-    ['dishDrop', 'dishObstr', 'dishDown', 'dishUp', 'dishUptime', 'dishSignal'].forEach((i) => { $(i).textContent = '--'; });
+    ['dishDrop', 'dishObstr', 'dishDown', 'dishUp', 'dishUptime', 'dishSignal',
+     'dishPeakDown', 'dishPeakUp'].forEach((i) => { $(i).textContent = '--'; });
     $('dishNote').textContent = 'No dish telemetry. Make sure this machine is on the Starlink WiFi.';
     return;
   }
@@ -207,6 +214,8 @@ function renderDish() {
     ? (ob.fraction_obstructed * 100).toFixed(1) + ' %' : '--';
   $('dishDown').textContent = fmtBps(d.downlink_throughput_bps);
   $('dishUp').textContent = fmtBps(d.uplink_throughput_bps);
+  $('dishPeakDown').textContent = S.peakDown ? fmtBps(S.peakDown) : '--';
+  $('dishPeakUp').textContent = S.peakUp ? fmtBps(S.peakUp) : '--';
   $('dishUptime').textContent = fmtUptime((d.device_state || {}).uptime_s);
   $('dishSignal').textContent = d.is_snr_persistently_low ? 'low SNR' : (d.is_snr_above_noise_floor ? 'nominal' : '--');
   $('dishAge').textContent = clock(d.at);
@@ -394,13 +403,26 @@ async function runPing(host, count) {
 }
 
 // ---------------------------------------------------------------- throughput
+const SPEED_HOST = 'https://speed.cloudflare.com';
+
+async function speedPing() {
+  const t0 = performance.now();
+  try {
+    await fetch(`${SPEED_HOST}/__down?bytes=0`, { cache: 'no-store' });
+    const ms = performance.now() - t0;
+    $('stPing').textContent = ms.toFixed(0) + ' ms';
+    return ms;
+  } catch (e) { $('stPing').textContent = '--'; return null; }
+}
+
 async function downloadTest() {
-  const bytes = 10 * 1024 * 1024;
+  const bytes = 25 * 1024 * 1024;
   $('tput').textContent = '…';
   try {
+    await fetch(`${SPEED_HOST}/__down?bytes=1000000`, { cache: 'no-store' });  // warm the connection
     const t0 = performance.now();
     let got = 0;
-    const r = await fetch(`https://speed.cloudflare.com/__down?bytes=${bytes}`, { cache: 'no-store' });
+    const r = await fetch(`${SPEED_HOST}/__down?bytes=${bytes}`, { cache: 'no-store' });
     const reader = r.body.getReader();
     for (;;) {
       const { done, value } = await reader.read();
@@ -410,10 +432,28 @@ async function downloadTest() {
     const secs = (performance.now() - t0) / 1000;
     const mbps = (got * 8) / secs / 1e6;
     $('tput').textContent = mbps.toFixed(1) + ' Mbps';
-    addLog('info', `download test: ${mbps.toFixed(1)} Mbps (${(got / 1048576).toFixed(1)} MiB in ${secs.toFixed(1)}s)`);
+    addLog('info', `download: ${mbps.toFixed(1)} Mbps (${(got / 1048576).toFixed(1)} MiB in ${secs.toFixed(1)}s)`);
   } catch (e) {
     $('tput').textContent = 'failed';
     addLog('loss', 'download test failed: ' + e.message);
+  }
+}
+
+async function uploadTest() {
+  const bytes = 10 * 1024 * 1024;
+  $('uput').textContent = '…';
+  try {
+    await fetch(`${SPEED_HOST}/__up`, { method: 'POST', body: new Blob([new Uint8Array(65536)]) });
+    const body = new Blob([new Uint8Array(bytes)]);
+    const t0 = performance.now();
+    await fetch(`${SPEED_HOST}/__up`, { method: 'POST', body, cache: 'no-store' });
+    const secs = (performance.now() - t0) / 1000;
+    const mbps = (bytes * 8) / secs / 1e6;
+    $('uput').textContent = mbps.toFixed(1) + ' Mbps';
+    addLog('info', `upload: ${mbps.toFixed(1)} Mbps (${(bytes / 1048576).toFixed(1)} MiB in ${secs.toFixed(1)}s)`);
+  } catch (e) {
+    $('uput').textContent = 'failed';
+    addLog('loss', 'upload test failed: ' + e.message);
   }
 }
 
@@ -438,10 +478,11 @@ function exportCsv() {
 $('btnToggle').addEventListener('click', () => (S.running ? stopMonitoring() : startMonitoring()));
 $('btnPing').addEventListener('click', () => runPing($('pingHost').value.trim() || '1.1.1.1', Number($('pingCount').value) || 10));
 $('btnPingDish').addEventListener('click', () => runPing('192.168.100.1', Number($('pingCount').value) || 10));
-$('btnThroughput').addEventListener('click', downloadTest);
+$('btnThroughput').addEventListener('click', () => { speedPing(); downloadTest(); });
+$('btnUpload').addEventListener('click', uploadTest);
 $('btnCsv').addEventListener('click', exportCsv);
 $('btnClear').addEventListener('click', () => {
-  S.samples = []; S.logs = []; S.outages = 0;
+  S.samples = []; S.logs = []; S.outages = 0; S.peakDown = S.peakUp = 0;
   render(); renderLog(); renderLegend();
 });
 window.addEventListener('resize', drawChart);
